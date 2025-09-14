@@ -19,15 +19,31 @@ const loadSearchHistoryFromLocalStorage = () => {
 export class GifService {// la instancia o singlenton de GifService se va a proveer en la raiz de la aplicacion (app-root), permitiendo que cualquier componente hijo de dicha railz pueda utilizar esta instancia o singlenton.
 
   private http = inject(HttpClient);
-  trendingGifs = signal<Gif[]>([]);
-  trendingGifsLoading = signal(true);
+  trendingGifs = signal<Gif[]>([]);// [gif,gif,gif,gif]
+  trendingGifsLoading = signal(false);
+  private trendingPage = signal(0);
+
+
+  trendingGifGroups = computed<Gif[][]>(() => {// esto se ejecuta cuando cambia this.trendingGifs()... actualizando asi el valor de trendingGifGroups(), impactando o actualizando el html que contenga a trendingGifGroups()
+
+    const groups = [];
+
+    for (let i = 0; i < this.trendingGifs().length; i += 3) {
+      groups.push(this.trendingGifs().slice(i, i + 3));
+    }
+
+    console.log({groups})
+
+    return groups;
+
+  });
 
   searchHistory = signal<Record<string, Gif[]>>(loadSearchHistoryFromLocalStorage());
   searchHistoryKeys = computed(() => Object.keys(this.searchHistory()));// cuando cambie el valor de la señal searchHistory, cambiara el valor de la señal searchHistoryKeys
 
   constructor() {
     console.log('GifService creado');
-    this.loadTrendingGifs();
+    this.loadTrendingGifs();// cambio de this.trendingGifs()
   }
 
   saveGifsToLocalStorage = effect(() => {// este efecto se ejecuta cada que la señal this.searchHistory() cambia su valor
@@ -36,18 +52,24 @@ export class GifService {// la instancia o singlenton de GifService se va a prov
   });
 
   loadTrendingGifs() {
+
+    if (this.trendingGifsLoading()) return;
+
+    this.trendingGifsLoading.set(true);
+
     this.http.get<GiphyResponse>(`${environment.giphyUrl}/gifs/trending`, {
       params: {
         api_key: environment.giphyApiKey,
         limit: 20,
+        offset: this.trendingPage() * 20
       }
     })// aqui van observables
 
     .subscribe((resp) => {// necesita subscribe para que se lance la peticion .get
       const gifs = GifMapper.mapGiphyItemsToGifArray(resp.data);
-      this.trendingGifs.set(gifs);
+      this.trendingGifs.update(currentTrendingGifs => [...currentTrendingGifs, ...gifs]);
+      this.trendingPage.update(page => page + 1);
       this.trendingGifsLoading.set(false);
-      console.log({ gifs });
     });
 
 
